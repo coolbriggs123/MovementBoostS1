@@ -1,4 +1,4 @@
-﻿using MelonLoader;
+using MelonLoader;
 using HarmonyLib;
 using UnityEngine;
 using System.IO;
@@ -92,6 +92,7 @@ namespace SprintSpeed
         private static CSteamID localSteamID;
         private static bool isHost = false;
         private static bool configSynced = false;
+        private static bool isInitialized = false;
         private static bool debugMode = false;
         private const string CONFIG_MESSAGE_PREFIX = "SPEED_CONFIG:";
         private const int CONFIG_SYNC_INTERVAL = 10; // Seconds between config sync attempts
@@ -208,23 +209,44 @@ namespace SprintSpeed
         
         public override void OnSceneWasInitialized(int buildIndex, string sceneName)
         {
+            if (sceneName != "Main") return;
+            
+            isInitialized = false;
             configSynced = false;
             MelonCoroutines.Start(DelayedInit());
         }
 
         private System.Collections.IEnumerator DelayedInit()
         {
-            yield return new WaitForSeconds(1.0f);
-            DetermineIfHost();
+            yield return new WaitForSeconds(1.0f); // Wait for scene to fully load
+            if (GameObject.Find("Player") != null) // Only proceed if we're in a valid scene with players
+            {
+                DetermineIfHost();
+                isInitialized = true;
+            }
         }
         
         public override void OnUpdate()
         {
+            if (!isInitialized || !isHost) return;
+
+            // Only sync config in Main scene
+            if (UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != "Main") return;
+            
             // If we're the host and config syncing is enabled, periodically sync config
             if (isHost && config.SyncConfig && !configSynced && Time.time - lastConfigSyncTime > CONFIG_SYNC_INTERVAL)
             {
                 SyncConfigToClients();
                 lastConfigSyncTime = Time.time;
+            }
+        }
+        
+        public override void OnSceneWasLoaded(int buildIndex, string sceneName)
+        {
+            if (sceneName != "Main")
+            {
+                isInitialized = false;
+                configSynced = false;
             }
         }
         
